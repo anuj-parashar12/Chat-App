@@ -1,0 +1,69 @@
+version: '3.9'
+
+services:
+  # ─── Reverse proxy ────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    ports:
+      - '80:80'
+    volumes:
+      - ./nginx/nginx.local.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - client
+      - server
+    restart: unless-stopped
+    networks:
+      - nexchat-network
+
+  # ─── React frontend ───────────────────────────────────────────────────────
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - nexchat-network
+
+  # ─── Node.js backend ──────────────────────────────────────────────────────
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    env_file:
+      - ./server/.env
+    environment:
+      # These two override the .env values so they work inside Docker
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis:6379
+      - CLIENT_URL=http://localhost
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - nexchat-network
+    volumes:
+      - server-logs:/app/logs
+
+  # ─── Redis (MongoDB is on Atlas — no local Mongo container needed) ─────────
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - nexchat-network
+
+volumes:
+  redis-data:
+  server-logs:
+
+networks:
+  nexchat-network:
+    driver: bridge

@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexchat-client
+  namespace: nexchat
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nexchat-client
+  template:
+    metadata:
+      labels:
+        app: nexchat-client
+    spec:
+      containers:
+        - name: client
+          image: your-registry/nexchat-client:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexchat-client
+  namespace: nexchat
+spec:
+  selector:
+    app: nexchat-client
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP
