@@ -1,0 +1,182 @@
+name: NexChat CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/nexchat
+
+jobs:
+  # ─────────────────────────────────────────────
+  # 1. Test Backend
+  # ─────────────────────────────────────────────
+  test-server:
+    name: Test Server
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Run server tests
+        working-directory: server
+        env:
+          NODE_ENV: test
+          MONGODB_URI: mongodb://localhost:27017/nexchat_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test_jwt_secret_32_chars_minimum
+          JWT_REFRESH_SECRET: test_refresh_secret
+          ENCRYPTION_KEY: 12345678901234567890123456789012
+        run: npm test
+
+  # ─────────────────────────────────────────────
+  # 2. Test Frontend
+  # ─────────────────────────────────────────────
+  test-client:
+    name: Test Client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Run client tests
+        working-directory: client
+        run: npm test -- --watchAll=false --passWithNoTests
+
+  # ─────────────────────────────────────────────
+  # 3. Build & Push Docker Images
+  # ─────────────────────────────────────────────
+  build-push:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    needs: [test-server, test-client]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (server)
+        id: meta-server
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-server
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push server image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./server
+          push: true
+          tags: ${{ steps.meta-server.outputs.tags }}
+          labels: ${{ steps.meta-server.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Extract metadata (client)
+        id: meta-client
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-client
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push client image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./client
+          push: true
+          tags: ${{ steps.meta-client.outputs.tags }}
+          labels: ${{ steps.meta-client.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─────────────────────────────────────────────
+  # 4. Deploy to Kubernetes
+  # ─────────────────────────────────────────────
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build-push
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Update image tags in manifests
+        run: |
+          SHA=${{ github.sha }}
+          sed -i "s|your-registry/nexchat-server:latest|${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-server:sha-${SHA::7}|g" k8s/base/server-deployment.yaml
+          sed -i "s|your-registry/nexchat-client:latest|${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-client:sha-${SHA::7}|g" k8s/base/client-deployment.yaml
+
+      - name: Apply Kubernetes manifests
+        run: |
+          kubectl apply -f k8s/base/namespace.yaml
+          kubectl apply -f k8s/base/configmap.yaml
+          kubectl apply -f k8s/base/server-deployment.yaml
+          kubectl apply -f k8s/base/client-deployment.yaml
+          kubectl apply -f k8s/base/hpa.yaml
+          kubectl apply -f k8s/base/ingress.yaml
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/nexchat-server -n nexchat --timeout=5m
+          kubectl rollout status deployment/nexchat-client -n nexchat --timeout=3m
+
+      - name: Verify deployment health
+        run: |
+          kubectl get pods -n nexchat
+          kubectl get services -n nexchat
