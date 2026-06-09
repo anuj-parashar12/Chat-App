@@ -3,6 +3,10 @@ const mongoose = require('mongoose');
 const app = require('../src/app');
 const User = require('../src/models/User');
 
+jest.mock('../src/services/emailService', () => ({
+  sendEmail: jest.fn().mockResolvedValue(true),
+}));
+
 beforeAll(async () => {
   await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/nexchat_test');
 });
