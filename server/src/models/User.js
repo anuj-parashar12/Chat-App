@@ -58,8 +58,6 @@ const userSchema = new mongoose.Schema({
   contacts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 }, { timestamps: true });
 
-userSchema.index({ email: 1 });
-userSchema.index({ username: 1 });
 userSchema.index({ 'presence.isOnline': 1 });
 
 userSchema.pre('save', async function (next) {

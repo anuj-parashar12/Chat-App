@@ -139,10 +139,12 @@ exports.logout = async (req, res, next) => {
 
     if (token) {
       const redis = getRedis();
-      // Blacklist access token for its remaining TTL
-      const decoded = jwt.decode(token);
-      const ttl = decoded?.exp - Math.floor(Date.now() / 1000);
-      if (ttl > 0) await redis.setex(`blacklist:${token}`, ttl, '1');
+      if (redis) {
+        // Blacklist access token for its remaining TTL
+        const decoded = jwt.decode(token);
+        const ttl = decoded?.exp - Math.floor(Date.now() / 1000);
+        if (ttl > 0) await redis.setex(`blacklist:${token}`, ttl, '1');
+      }
     }
 
     // Remove refresh token from DB
