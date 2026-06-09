@@ -17,11 +17,13 @@ const protect = async (req, res, next) => {
       return next(new AppError('Authentication required', 401));
     }
 
-    // Check token blacklist in Redis
+    // Check token blacklist in Redis (skipped if Redis is unavailable)
     const redis = getRedis();
-    const isBlacklisted = await redis.get(`blacklist:${token}`);
-    if (isBlacklisted) {
-      return next(new AppError('Token is no longer valid', 401));
+    if (redis) {
+      const isBlacklisted = await redis.get(`blacklist:${token}`);
+      if (isBlacklisted) {
+        return next(new AppError('Token is no longer valid', 401));
+      }
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);

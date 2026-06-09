@@ -6,7 +6,7 @@ const ONLINE_TTL = 35; // seconds (slightly > ping interval)
 const registerPresenceHandlers = (io, socket) => {
   const setOnline = async () => {
     const redis = getRedis();
-    await redis.setex(`presence:${socket.userId}`, ONLINE_TTL, 'online');
+    if (redis) await redis.setex(`presence:${socket.userId}`, ONLINE_TTL, 'online');
 
     await User.findByIdAndUpdate(socket.userId, {
       'presence.isOnline': true,
@@ -18,7 +18,7 @@ const registerPresenceHandlers = (io, socket) => {
 
   const setOffline = async () => {
     const redis = getRedis();
-    await redis.del(`presence:${socket.userId}`);
+    if (redis) await redis.del(`presence:${socket.userId}`);
 
     await User.findByIdAndUpdate(socket.userId, {
       'presence.isOnline': false,
@@ -37,7 +37,7 @@ const registerPresenceHandlers = (io, socket) => {
   // Heartbeat to keep presence alive
   socket.on('heartbeat', async () => {
     const redis = getRedis();
-    await redis.expire(`presence:${socket.userId}`, ONLINE_TTL);
+    if (redis) await redis.expire(`presence:${socket.userId}`, ONLINE_TTL);
   });
 
   socket.on('set_status', async ({ status }) => {

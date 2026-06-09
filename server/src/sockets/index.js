@@ -24,10 +24,15 @@ const initializeSocket = (server) => {
     pingInterval: 25000,
   });
 
-  // Redis adapter for horizontal scaling (ioredis auto-connects — no .connect() needed)
+  // Redis adapter for horizontal scaling
   if (process.env.REDIS_URL) {
-    const pubClient = new Redis(process.env.REDIS_URL);
+    const pubClient = new Redis(process.env.REDIS_URL, {
+      retryStrategy: (times) => Math.min(times * 500, 10000),
+      maxRetriesPerRequest: null,
+    });
     const subClient = pubClient.duplicate();
+    pubClient.on('error', (err) => logger.error('Socket pubClient Redis error:', err));
+    subClient.on('error', (err) => logger.error('Socket subClient Redis error:', err));
     io.adapter(createAdapter(pubClient, subClient));
     logger.info('Socket.IO Redis adapter initialized');
   }

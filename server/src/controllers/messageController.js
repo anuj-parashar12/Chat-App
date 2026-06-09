@@ -18,9 +18,11 @@ exports.getMessages = async (req, res, next) => {
 
     const redis = getRedis();
     const cacheKey = `messages:${chatId}:page:${page}`;
-    const cached = await redis.get(cacheKey);
-    if (cached && !before) {
-      return res.json({ success: true, ...JSON.parse(cached) });
+    if (redis) {
+      const cached = await redis.get(cacheKey);
+      if (cached && !before) {
+        return res.json({ success: true, ...JSON.parse(cached) });
+      }
     }
 
     const query = {
@@ -49,7 +51,7 @@ exports.getMessages = async (req, res, next) => {
       },
     };
 
-    if (!before) await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(payload));
+    if (redis && !before) await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(payload));
 
     res.json({ success: true, ...payload });
   } catch (err) {
@@ -93,8 +95,10 @@ exports.sendMessage = async (req, res, next) => {
 
     // Invalidate message cache
     const redis = getRedis();
-    const keys = await redis.keys(`messages:${chatId}:*`);
-    if (keys.length) await redis.del(...keys);
+    if (redis) {
+      const keys = await redis.keys(`messages:${chatId}:*`);
+      if (keys.length) await redis.del(...keys);
+    }
 
     // Emit via Socket.IO
     const io = getIO();
