@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const { protect } = require('../middleware/auth');
-const { upload } = require('../config/cloudinary');
+const { uploadSingle } = require('../config/cloudinary');
 const Message = require('../models/Message');
 const Chat = require('../models/Chat');
 const { AppError } = require('../middleware/errorHandler');
@@ -8,7 +8,7 @@ const { getIO } = require('../sockets');
 
 router.use(protect);
 
-router.post('/upload/:chatId', upload.single('file'), async (req, res, next) => {
+router.post('/upload/:chatId', uploadSingle('file'), async (req, res, next) => {
   try {
     if (!req.file) return next(new AppError('No file uploaded', 400));
 

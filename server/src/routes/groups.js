@@ -2,7 +2,7 @@ const router = require('express').Router();
 const { body } = require('express-validator');
 const { validate } = require('../middleware/validate');
 const { protect } = require('../middleware/auth');
-const { upload } = require('../config/cloudinary');
+const { uploadSingle } = require('../config/cloudinary');
 const Chat = require('../models/Chat');
 const { AppError } = require('../middleware/errorHandler');
 const { getIO } = require('../sockets');
@@ -41,7 +41,7 @@ router.post('/', [
   }
 });
 
-router.patch('/:groupId', upload.single('avatar'), async (req, res, next) => {
+router.patch('/:groupId', uploadSingle('avatar'), async (req, res, next) => {
   try {
     const group = await Chat.findOne({ _id: req.params.groupId, type: 'group', admins: req.user._id });
     if (!group) return next(new AppError('Group not found or insufficient permissions', 404));

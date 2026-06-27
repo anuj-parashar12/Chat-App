@@ -7,12 +7,29 @@ jest.mock('../src/services/emailService', () => ({
   sendEmail: jest.fn().mockResolvedValue(true),
 }));
 
+// SAFETY: tests call dropDatabase(), so never connect to a non-test database.
+// Force a *_test database name regardless of the configured MONGODB_URI, and
+// refuse to run against anything that doesn't look like a test DB.
+const resolveTestUri = () => {
+  const raw = process.env.MONGODB_URI || 'mongodb://localhost:27017/nexchat_test';
+  // Replace the database segment (between the last '/' and any '?') with nexchat_test
+  const testUri = raw.replace(/\/([^/?]*)(\?|$)/, '/nexchat_test$2');
+  return testUri;
+};
+
 beforeAll(async () => {
-  await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/nexchat_test');
+  const uri = resolveTestUri();
+  await mongoose.connect(uri);
+  const dbName = mongoose.connection.name;
+  if (!/test/i.test(dbName)) {
+    throw new Error(`Refusing to run tests against non-test database "${dbName}". Tests drop the DB.`);
+  }
 });
 
 afterAll(async () => {
-  await mongoose.connection.dropDatabase();
+  if (/test/i.test(mongoose.connection.name)) {
+    await mongoose.connection.dropDatabase();
+  }
   await mongoose.connection.close();
 });
 

@@ -2,7 +2,7 @@ const router = require('express').Router();
 const { body } = require('express-validator');
 const { validate } = require('../middleware/validate');
 const { protect } = require('../middleware/auth');
-const { upload } = require('../config/cloudinary');
+const { uploadSingle } = require('../config/cloudinary');
 const User = require('../models/User');
 const { AppError } = require('../middleware/errorHandler');
 
@@ -29,7 +29,7 @@ router.patch('/me', [
   }
 });
 
-router.post('/me/avatar', upload.single('avatar'), async (req, res, next) => {
+router.post('/me/avatar', uploadSingle('avatar'), async (req, res, next) => {
   try {
     if (!req.file) return next(new AppError('No file uploaded', 400));
     const user = await User.findByIdAndUpdate(

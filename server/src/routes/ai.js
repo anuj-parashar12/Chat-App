@@ -14,7 +14,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 // Reusable helper — returns plain text from Gemini
 const geminiText = async (prompt, systemInstruction) => {
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.5-flash',
     ...(systemInstruction && { systemInstruction }),
   });
   const result = await model.generateContent(prompt);

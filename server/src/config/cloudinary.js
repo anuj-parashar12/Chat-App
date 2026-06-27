@@ -66,4 +66,20 @@ const upload = multer({
   },
 });
 
-module.exports = { cloudinary, upload };
+// Wrap multer's single-file middleware so file-filter / size errors become
+// clean 400s instead of bubbling to the 500 handler.
+const { AppError } = require('../middleware/errorHandler');
+const uploadSingle = (field) => (req, res, next) => {
+  upload.single(field)(req, res, (err) => {
+    if (err) {
+      const msg = err.message || 'Upload failed';
+      const isClientErr =
+        err instanceof multer.MulterError || // size limit, unexpected field, etc.
+        /is not allowed/i.test(msg);
+      return next(new AppError(msg, isClientErr ? 400 : 500));
+    }
+    next();
+  });
+};
+
+module.exports = { cloudinary, upload, uploadSingle };

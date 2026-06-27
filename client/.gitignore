@@ -7,15 +7,13 @@
 # Secrets, credentials & private keys
 *.pem
 *.key
-*.p12
-*.pfx
 *credentials*.json
 *serviceAccount*.json
 .npmrc
 
 node_modules/
-coverage/
-logs/
-*.log
-dist/
 build/
+dist/
+coverage/
+*.log
+.DS_Store
